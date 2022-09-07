@@ -33,7 +33,9 @@ def configure_manifest_files(app):
 
     def parse_manifest_json():
         try:
+            print(manifest)
             manifest_file = os.path.join(os.path.dirname(__file__), os.pardir, 'static/dist/manifest.json')
+            print(manifest_file)
             with open(manifest_file) as file:
                 manifest.update(json.load(file))
 
