@@ -116,6 +116,7 @@ class SchedulerJob(BaseJob):
         **kwargs,
     ):
         self.subdir = subdir
+
         self.num_runs = num_runs
         # In specific tests, we want to stop the parse loop after the _files_ have been parsed a certain
         # number of times. This is only to support testing, and isn't something a user is likely to want to
