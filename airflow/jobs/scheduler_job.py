@@ -1105,7 +1105,8 @@ class SchedulerJob(BaseJob):
         # Test raising this error once but not on the next retry
         if self.db_retry_num == 0:
             self.db_retry_num += 1
-            raise OperationalError
+            raise OperationalError("Scheduling dag run deadlock", params=None, orig=RuntimeError('55P03'))
+
         guard.commit()
 
         return callback_tuples, callback_to_run
