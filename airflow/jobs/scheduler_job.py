@@ -116,7 +116,7 @@ class SchedulerJob(BaseJob):
         **kwargs,
     ):
         self.subdir = subdir
-
+        self.db_retry_num = 0
         self.num_runs = num_runs
         # In specific tests, we want to stop the parse loop after the _files_ have been parsed a certain
         # number of times. This is only to support testing, and isn't something a user is likely to want to
@@ -1102,6 +1102,10 @@ class SchedulerJob(BaseJob):
             callback_to_run = self._schedule_dag_run(dag_run, session)
             callback_tuples.append((dag_run, callback_to_run))
 
+        # Test raising this error once but not on the next retry
+        if self.db_retry_num == 0:
+            self.db_retry_num += 1
+            raise OperationalError
         guard.commit()
 
         return callback_tuples, callback_to_run
