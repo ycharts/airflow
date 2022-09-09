@@ -851,7 +851,7 @@ class SchedulerJob(BaseJob):
                 next_event = timers.run(blocking=False)
                 self.log.debug("Next timed event is in %f", next_event)
 
-            self.log.debug("Ran scheduling loop in %.2f seconds", timer.duration)
+            self.log.info("Ran scheduling loop in %.2f seconds", timer.duration)
 
             if not is_unit_test and not num_queued_tis and not num_finished_events:
                 # If the scheduler is doing things, don't sleep. This means when there is work to do, the

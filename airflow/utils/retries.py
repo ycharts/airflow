@@ -75,7 +75,7 @@ def retry_db_transaction(_func: Any = None, retries: int = MAX_DB_RETRIES, **ret
 
             for attempt in run_with_db_retries(max_retries=retries, logger=logger, **retry_kwargs):
                 with attempt:
-                    logger.debug(
+                    logger.info(
                         "Running %s with retries. Try %d of %d",
                         func.__qualname__,
                         attempt.retry_state.attempt_number,
