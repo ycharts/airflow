@@ -406,6 +406,7 @@ def classify(
     find_bypass_run: Callable[[], str | None],
     changes_ci_files: Callable[[], bool | None],
     count_behind: Callable[[], int | None] = lambda: None,
+    head_shared_across_bases: bool = False,
 ) -> Plan:
     """
     Decide the mutations for one gated pull request.
@@ -420,6 +421,8 @@ def classify(
         commit the answer may not belong to.
     :param count_behind: how many commits the head commit is behind the base branch, None when
         unknown; called at the same time as ``changes_ci_files``.
+    :param head_shared_across_bases: another gated pull request has the same head commit and a
+        different base, so their changed files differ but they share one commit status.
     """
     plan = Plan()
     labels = set(pr.labels)
@@ -512,14 +515,22 @@ def classify(
         # The decision is read back from the commit status on the head commit, which only
         # apache/airflow's own tokens can write, never from a comment. The changed files depend
         # on the base too, so a status written before the pull request was retargeted is stale.
-        # The status is shared by every pull request with this head commit; scoping it to one is
-        # tracked at https://github.com/apache/airflow/issues/74907
         previous = status_state(pr.current_status)
         decided = previous in (ForkState.GREEN.value, ForkState.GREEN_UNVERIFIED.value)
         stale = pr.last_base_change_at is not None and (
             pr.status_created_at is None or pr.status_created_at <= pr.last_base_change_at
         )
-        if decided and not stale:
+        if head_shared_across_bases:
+            # One commit status cannot hold a decision per base, and trusting the one written for
+            # the other pull request could skip the check; both wait for a maintainer instead.
+            unverified = True
+            if previous != ForkState.GREEN_UNVERIFIED.value:
+                plan.attention.append(
+                    "fork CI is green, but another gated pull request to a different base has the "
+                    "same head commit, so its CI-defining changes cannot be told apart; review and add "
+                    "`use project ci` to verify"
+                )
+        elif decided and not stale:
             unverified = previous == ForkState.GREEN_UNVERIFIED.value
         else:
             # Writing the status again, even unchanged, records when this decision was made.
@@ -1137,6 +1148,14 @@ def count_commits_behind(client: GitHubClient, repo: str, pr: PullRequestSnapsho
     return compare.get("behind_by")
 
 
+def find_heads_shared_across_bases(prs: Iterable[PullRequestSnapshot]) -> set[str]:
+    """Head commits of more than one pull request whose bases differ."""
+    bases_by_head: dict[str, set[str]] = {}
+    for pr in prs:
+        bases_by_head.setdefault(pr.head_sha, set()).add(pr.base_ref)
+    return {head for head, bases in bases_by_head.items() if len(bases) > 1}
+
+
 def apply_plan(client: GitHubClient, pr: PullRequestSnapshot, plan: Plan) -> None:
     if plan.draft is True:
         client.convert_to_draft(pr.number, pr.node_id)
@@ -1255,6 +1274,7 @@ def run_reconcile(
         client, repo=repo, now=now, base_triggers=load_workflow_triggers(workflows_dir)
     )
 
+    shared_heads = find_heads_shared_across_bases(prs)
     for listed in prs:
         try:
             pr = listed if listed.comments_cursor is None else find_state_comment(client, repo, listed)
@@ -1280,6 +1300,7 @@ def run_reconcile(
                     pull_request_changes_ci_files, client, repo, pr.number, pr.head_sha
                 ),
                 count_behind=functools.partial(count_commits_behind, client, repo, pr),
+                head_shared_across_bases=pr.head_sha in shared_heads,
             )
             apply_plan(client, pr, plan)
             unknown.extend((pr.number, reason) for reason in plan.unknown)
