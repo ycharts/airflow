@@ -29,6 +29,7 @@ from airflow_breeze.utils.fork_ci_messages import (
     CI_PASSED_REVOKED_DESCRIPTION,
     FOOTER,
     Marker,
+    gate_modified_close_comment,
     inactivity_close_comment,
     nudge_comment,
     parse_marker,
@@ -36,6 +37,7 @@ from airflow_breeze.utils.fork_ci_messages import (
     render_marker,
     state_comment,
     tamper_close_comment,
+    ungated_comment,
 )
 
 MARKER = Marker(state="awaiting_push", sha="abc123", since=datetime(2026, 10, 15, 10, 0, tzinfo=UTC))
@@ -43,7 +45,11 @@ MARKER = Marker(state="awaiting_push", sha="abc123", since=datetime(2026, 10, 15
 
 @pytest.mark.parametrize(
     "marker",
-    [pytest.param(MARKER, id="without-behind"), pytest.param(replace(MARKER, behind=12), id="behind")],
+    [
+        pytest.param(MARKER, id="without-behind"),
+        pytest.param(replace(MARKER, behind=12), id="behind"),
+        pytest.param(replace(MARKER, gate_checked=True), id="gate-checked"),
+    ],
 )
 def test_marker_round_trip(marker):
     assert parse_marker(f"text before\n{render_marker(marker)}\ntext after") == marker
@@ -103,6 +109,8 @@ def test_parse_marker_malformed(body):
         pytest.param(nudge_comment(fork="u/airflow"), id="nudge"),
         pytest.param(inactivity_close_comment(days=7, fork="u/airflow"), id="inactivity"),
         pytest.param(tamper_close_comment(run_url="https://x"), id="tamper"),
+        pytest.param(gate_modified_close_comment(change="it changes `x`"), id="gate-modified"),
+        pytest.param(ungated_comment(MARKER, base_ref="v2-10-test"), id="ungated"),
     ],
 )
 def test_every_comment_ends_with_footer(text):
