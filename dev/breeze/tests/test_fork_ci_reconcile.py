@@ -1478,3 +1478,15 @@ def test_count_commits_behind(client, side_effect, expected):
 
     assert count_commits_behind(client, REPO, _pr(base_ref="v3-1-test")) == expected
     assert client.rest_get.call_args.args[0] == f"repos/{REPO}/compare/v3-1-test...someone:abc123?per_page=1"
+
+
+def test_nudge_is_posted_before_the_state_comment_records_awaiting_push(client):
+    pr = _pr(marker=_marker("setup_required"), marker_comment_id=5)
+    plan, _, _ = _classify(pr, ForkObservation(workflow_state="active"))
+    client.create_comment.side_effect = GitHubError("gh api failed: HTTP 500")
+
+    with pytest.raises(GitHubError):
+        apply_plan(client, pr, plan)
+
+    assert "Push this branch again" in client.create_comment.call_args.args[1]
+    client.update_comment.assert_not_called()
